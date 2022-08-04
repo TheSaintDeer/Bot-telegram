@@ -1,0 +1,31 @@
+import telebot
+from telebot import types
+import table
+
+API_TOKEN = '5491063411:AAHuG5JGbBJqBQOpxiskOiPy2FEdsnCPxOQ'
+bot = telebot.TeleBot(API_TOKEN)
+
+table.starting()
+
+@bot.message_handler(commands=['start'])
+def start(message):
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+
+    btn1 = types.KeyboardButton("Yes, I'm new user")
+    btn2 = types.KeyboardButton("No, I'm already registered")
+
+    markup.add(btn1, btn2)
+
+    bot.send_message(message.chat.id, "Hi there, I am DateBot.\nI am here to find for you a people. Are you a new user?".format(message.from_user), reply_markup=markup)
+    
+@bot.message_handler(content_types=['text'])
+def user(message):
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add(types.KeyboardButton("/start")) 
+
+    if message.text == "Yes, I'm new user":
+        bot.send_message(message.chat.id, "bad OK", reply_markup=markup)
+    elif message.text == "No, I'm already registered":
+        bot.send_message(message.chat.id, "good OK", reply_markup=markup)
+
+bot.infinity_polling()
