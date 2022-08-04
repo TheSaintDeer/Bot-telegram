@@ -1,11 +1,15 @@
+from hashlib import new
 import telebot
 from telebot import types
-import table
+import sqlite3
 
 API_TOKEN = '5491063411:AAHuG5JGbBJqBQOpxiskOiPy2FEdsnCPxOQ'
 bot = telebot.TeleBot(API_TOKEN)
 
-table.starting()
+con = sqlite3.connect('users.db', check_same_thread=False)
+cur = con.cursor()
+cur.execute('''CREATE TABLE IF NOT EXISTS users
+                   (id TEXT, name TEXT, age SMALLINT, pass TEXT, description TEXT)''')
 
 @bot.message_handler(commands=['start'])
 def start(message):
@@ -20,12 +24,24 @@ def start(message):
     
 @bot.message_handler(content_types=['text'])
 def user(message):
+    
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add(types.KeyboardButton("/start")) 
 
     if message.text == "Yes, I'm new user":
-        bot.send_message(message.chat.id, "bad OK", reply_markup=markup)
+
+        bot.reply_to(message, """\
+                    In this case, answer a couple of questions.\nWhat is your name?\
+                    """)
+
+        cur.execute("INSERT INTO users VALUES (?, ?, ?, ?, ?)", (message.from_user.username, '', 0, '', ''))
+        con.commit()
+
     elif message.text == "No, I'm already registered":
+        
         bot.send_message(message.chat.id, "good OK", reply_markup=markup)
+            
+    
+        
 
 bot.infinity_polling()
