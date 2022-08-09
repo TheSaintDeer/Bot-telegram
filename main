@@ -8,21 +8,24 @@ bot = telebot.TeleBot(API_TOKEN)
 con = sqlite3.connect('users.db', check_same_thread=False)
 cur = con.cursor()
 cur.execute('''CREATE TABLE IF NOT EXISTS users
-                   (id TEXT, name TEXT, pass TEXT)''')
+                   (nickname TEXT PRIMARY KEY, username TEXT, pass TEXT)''')
 
 def create_user(message):
     msg = bot.reply_to(message, """\
                     In this case, answer a couple of questions.\nWhat is your name?\
                     """)
 
-    cur.execute("INSERT INTO users VALUES (?, ?, ?)", (message.from_user.username, '', ''))
-    con.commit() 
     bot.register_next_step_handler(msg, input_name)
 
 def input_name(message):
     name = message.text
-    cur.execute("UPDATE users SET name=? WHERE id=?", (name, message.from_user.username))
-    con.commit() 
+    try:
+        cur.execute("INSERT INTO users VALUES (?, ?, ?)", (name, message.from_user.username, ''))
+        con.commit()  
+    except sqlite3.IntegrityError:
+        bot.send_message(message.chat.id, "You already have account.")
+        exit()
+        # add recovery account
 
     msg = bot.reply_to(message, """\
             Now enter your password.\
@@ -31,7 +34,7 @@ def input_name(message):
 
 def input_pass(message):
     password = message.text
-    cur.execute("UPDATE users SET pass=? WHERE id=?", (password, message.from_user.username))
+    cur.execute("UPDATE users SET pass=? WHERE username=?", (password, message.from_user.username))
     con.commit() 
 
     bot.send_message(message.chat.id, "You have completed registration.")
@@ -52,7 +55,6 @@ def start(message):
 def user(message):
 
     if message.text == "Yes, I'm new user":
-
         create_user(message)
 
     elif message.text == "No, I'm already registered":
@@ -62,10 +64,7 @@ def user(message):
         bot.send_message(message.chat.id, "good OK", reply_markup=markup)
 
     else:
-
         bot.send_message(message.chat.id, "I do not know this command")
 
 
-    
-        
 bot.infinity_polling()
