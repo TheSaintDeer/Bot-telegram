@@ -8,11 +8,11 @@ bot = telebot.TeleBot(API_TOKEN)
 con = sqlite3.connect('users.db', check_same_thread=False)
 cur = con.cursor()
 cur.execute('''CREATE TABLE IF NOT EXISTS users
-                   (nickname TEXT PRIMARY KEY, username TEXT, pass TEXT)''')
+                   (nickname TEXT PRIMARY KEY, username TEXT, pass TEXT, chat_id TEXT)''')
 
 def create_user(message):
     msg = bot.reply_to(message, """\
-                    In this case, answer a couple of questions.\nWhat is your name?\
+                    In this case, answer a couple of questions.\nWhat is your nickname?\
                     """)
 
     bot.register_next_step_handler(msg, input_name)
@@ -20,25 +20,52 @@ def create_user(message):
 def input_name(message):
     name = message.text
     try:
-        cur.execute("INSERT INTO users VALUES (?, ?, ?)", (name, message.from_user.username, ''))
+        cur.execute("INSERT INTO users VALUES (?, ?, ?, ?)", (name, message.from_user.username, '', ''))
         con.commit()  
     except sqlite3.IntegrityError:
         bot.send_message(message.chat.id, "You already have account.")
         exit()
         # add recovery account
 
-    msg = bot.reply_to(message, """\
+    bot.delete_message(message.chat.id, message.message_id)
+
+    msg = bot.send_message(message.chat.id, """\
             Now enter your password.\
             """)
     bot.register_next_step_handler(msg, input_pass)
 
 def input_pass(message):
     password = message.text
+    chat_id = message.chat.id
     cur.execute("UPDATE users SET pass=? WHERE username=?", (password, message.from_user.username))
+    cur.execute("UPDATE users SET chat_id=? WHERE username=?", (chat_id, message.from_user.username))
     con.commit() 
+    bot.delete_message(message.chat.id, message.message_id)
 
-    bot.send_message(message.chat.id, "You have completed registration.")
+    btn1 = types.KeyboardButton("Choice game")
+    btn2 = types.KeyboardButton("Exit")
 
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add(btn1, btn2)
+
+    bot.send_message(message.chat.id, "You have completed registration.".format(message.from_user), reply_markup=markup)
+
+def log_in(message):
+    res = cur.execute("SELECT nickname FROM users WHERE users.username=?", (message.from_user.username,))
+    msg = bot.send_message(message.chat.id, f"I found your profile: {res.fetchone()[0]}. Enter password.")
+
+    bot.register_next_step_handler(msg, get_pass)
+
+def get_pass(message):
+    password = message.text
+    res = cur.execute("SELECT pass FROM users WHERE users.username=?", (message.from_user.username,))
+    enter_password = res.fetchone()[0]
+
+    # print(password, enter_password)
+    if password == enter_password:
+        bot.send_message(message.chat.id, "Successfully logged in.")
+        cur.execute("UPDATE users SET chat_id=? WHERE username=?", (message.chat.id, message.from_user.username))
+        con.commit()
 
 @bot.message_handler(commands=['start'])
 def start(message):
@@ -58,13 +85,18 @@ def user(message):
         create_user(message)
 
     elif message.text == "No, I'm already registered":
+        log_in(message)
+
+    elif message.text == "Exit":
+        cur.execute("UPDATE users SET chat_id=? WHERE username=?", ("", message.from_user.username))
+        con.commit()
 
         markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        markup.add(types.KeyboardButton("/start")) 
-        bot.send_message(message.chat.id, "good OK", reply_markup=markup)
+        btn1 = types.KeyboardButton("/start")
+        markup.add(btn1)
+        bot.send_message(message.chat.id, "You exited.".format(message.from_user), reply_markup=markup)
 
     else:
         bot.send_message(message.chat.id, "I do not know this command")
-
 
 bot.infinity_polling()
