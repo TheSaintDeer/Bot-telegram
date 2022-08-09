@@ -1,4 +1,3 @@
-from hashlib import new
 import telebot
 from telebot import types
 import sqlite3
@@ -9,7 +8,34 @@ bot = telebot.TeleBot(API_TOKEN)
 con = sqlite3.connect('users.db', check_same_thread=False)
 cur = con.cursor()
 cur.execute('''CREATE TABLE IF NOT EXISTS users
-                   (id TEXT, name TEXT, age SMALLINT, pass TEXT, description TEXT)''')
+                   (id TEXT, name TEXT, pass TEXT)''')
+
+def create_user(message):
+    msg = bot.reply_to(message, """\
+                    In this case, answer a couple of questions.\nWhat is your name?\
+                    """)
+
+    cur.execute("INSERT INTO users VALUES (?, ?, ?)", (message.from_user.username, '', ''))
+    con.commit() 
+    bot.register_next_step_handler(msg, input_name)
+
+def input_name(message):
+    name = message.text
+    cur.execute("UPDATE users SET name=? WHERE id=?", (name, message.from_user.username))
+    con.commit() 
+
+    msg = bot.reply_to(message, """\
+            Now enter your password.\
+            """)
+    bot.register_next_step_handler(msg, input_pass)
+
+def input_pass(message):
+    password = message.text
+    cur.execute("UPDATE users SET pass=? WHERE id=?", (password, message.from_user.username))
+    con.commit() 
+
+    bot.send_message(message.chat.id, "You have completed registration.")
+
 
 @bot.message_handler(commands=['start'])
 def start(message):
@@ -20,28 +46,26 @@ def start(message):
 
     markup.add(btn1, btn2)
 
-    bot.send_message(message.chat.id, "Hi there, I am DateBot.\nI am here to find for you a people. Are you a new user?".format(message.from_user), reply_markup=markup)
+    bot.send_message(message.chat.id, "Hi there, I am GameBot.\nI am here to play with other people. Are you a new user?".format(message.from_user), reply_markup=markup)
     
 @bot.message_handler(content_types=['text'])
 def user(message):
-    
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.add(types.KeyboardButton("/start")) 
 
     if message.text == "Yes, I'm new user":
 
-        bot.reply_to(message, """\
-                    In this case, answer a couple of questions.\nWhat is your name?\
-                    """)
-
-        cur.execute("INSERT INTO users VALUES (?, ?, ?, ?, ?)", (message.from_user.username, '', 0, '', ''))
-        con.commit()
+        create_user(message)
 
     elif message.text == "No, I'm already registered":
-        
+
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.add(types.KeyboardButton("/start")) 
         bot.send_message(message.chat.id, "good OK", reply_markup=markup)
-            
+
+    else:
+
+        bot.send_message(message.chat.id, "I do not know this command")
+
+
     
         
-
 bot.infinity_polling()
