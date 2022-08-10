@@ -1,3 +1,4 @@
+from itertools import count
 import telebot
 from telebot import types
 import sqlite3
@@ -25,7 +26,6 @@ def input_name(message):
     except sqlite3.IntegrityError:
         bot.send_message(message.chat.id, "You already have account.")
         exit()
-        # add recovery account
 
     bot.delete_message(message.chat.id, message.message_id)
 
@@ -42,7 +42,7 @@ def input_pass(message):
     con.commit() 
     bot.delete_message(message.chat.id, message.message_id)
 
-    btn1 = types.KeyboardButton("Choice game")
+    btn1 = types.KeyboardButton("Find game")
     btn2 = types.KeyboardButton("Exit")
 
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -61,11 +61,28 @@ def get_pass(message):
     res = cur.execute("SELECT pass FROM users WHERE users.username=?", (message.from_user.username,))
     enter_password = res.fetchone()[0]
 
-    # print(password, enter_password)
     if password == enter_password:
-        bot.send_message(message.chat.id, "Successfully logged in.")
+        btn1 = types.KeyboardButton("Find game")
+        btn2 = types.KeyboardButton("Exit")
+
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        markup.add(btn1, btn2)
+        bot.send_message(message.chat.id, "Successfully logged in.".format(message.from_user), reply_markup=markup)
         cur.execute("UPDATE users SET chat_id=? WHERE username=?", (message.chat.id, message.from_user.username))
         con.commit()
+
+def get_nickname(message):
+    res = cur.execute("SELECT nickname FROM users WHERE users.username=?", (message.from_user.username,))
+    con.commit()
+    return res.fetchone()[0]
+
+def find_player(game):
+    res = cur.execute("SELECT chat_id FROM ?", (game,))
+    con.commit()
+
+    cur.execute("DELETE FROM tic_tac_toe WHERE nickname=?", (res.fetchone()[0]))
+    con.commit()
+    return res.fetchone()[0]
 
 @bot.message_handler(commands=['start'])
 def start(message):
@@ -95,6 +112,34 @@ def user(message):
         btn1 = types.KeyboardButton("/start")
         markup.add(btn1)
         bot.send_message(message.chat.id, "You exited.".format(message.from_user), reply_markup=markup)
+
+    elif message.text == "Find game":
+        markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+        btn1 = types.KeyboardButton("Tic Tac Toe")
+        markup.add(btn1)
+        bot.send_message(message.chat.id, "Choice game.".format(message.from_user), reply_markup=markup)
+
+    elif message.text == "Tic Tac Toe":
+        cur_ttt = con.cursor()
+        cur_ttt.execute('''CREATE TABLE IF NOT EXISTS tic_tac_toe
+                           (nickname TEXT PRIMARY KEY, chat_id TEXT)''')
+
+        res = cur_ttt.execute("SELECT chat_id FROM tic_tac_toe")
+        print(res.fetchall())
+        print(res.fetchone())
+
+        if len(res.fetchall()) < 1:
+            bot.send_message(message.chat.id, "I'm looking for user for you.")
+            try:
+                cur_ttt.execute("INSERT INTO tic_tac_toe VALUES (?, ?)", (get_nickname(message), message.chat.id))
+                con.commit()  
+            except sqlite3.IntegrityError:
+                bot.send_message(message.chat.id, "You are already looking for the game.")
+        else:
+            bot.send_message(message.chat.id, "I found player.")
+            cur_ttt.execute("DELETE FROM tic_tac_toe WHERE chat_id=?", (res.fetchmany()[0][0]))
+            con.commit()
+
 
     else:
         bot.send_message(message.chat.id, "I do not know this command")
