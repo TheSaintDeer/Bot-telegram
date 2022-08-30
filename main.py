@@ -1,8 +1,7 @@
-from re import L
 import telebot
 from telebot import types
 import sqlite3
-from games import TTT
+import re
 
 with sqlite3.connect("database.db") as db:
     cursor = db.cursor()
@@ -16,6 +15,11 @@ with sqlite3.connect("database.db") as db:
         id_chat VARCHAR(20) NOT NULL REFERENCES users,
         game VARCHAR(3) NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS ttt(
+        chat_host VARCHAR(20) PRIMARY KEY NOT NULL,
+        chat_player VARCHAR(20) NOT NULL,
+        turn VARCHAR(1)
+    )
     """
 
     cursor.executescript(query)
@@ -84,26 +88,38 @@ def find_game(call, tag_game):
             cursor.close()
             db.close()
 
-            game_TTT(chat, player[0], start_game(), 0)
+            game_TTT(chat, player[0])
             
     except sqlite3.Error as e:
         print(f"Error: {e}!")
 
-def start_game():
-    cells = TTT.get_map()
-    msg = ""
-    for y in range(5):
-        for x in range(5):
-            if cells[x + y*5]:
-                msg += "⬜"
-            else:
-                msg += "⬛"
-        msg += "\n"
-    return msg
+def game_TTT(host, player):
+    markup = types.InlineKeyboardMarkup()
+    markup.row_width = 3
 
-def game_TTT(host, player, cells, turn):
-    bot.send_message(host, cells)
-    bot.send_message(player, cells)
+    for i in range(3):
+        btn = []
+        for j in range(3):
+            btn.append(types.InlineKeyboardButton(text='⬜', callback_data='TTT'+str(i)+str(j)))
+
+        markup.add(btn[0], btn[1], btn[2])
+
+    msg_host = bot.send_message(host, "Rules:", reply_markup=markup)
+    msg_player = bot.send_message(player, "Rules:", reply_markup=markup)
+
+    try:
+        db = sqlite3.connect("database.db")
+        cursor = db.cursor()
+
+        cursor.execute("INSERT INTO ttt(chat_host, chat_player, turn) VALUES(?, ?, ?)", msg_host, msg_player, '0')
+        db.commit()
+
+    except sqlite3.Error as e:
+        print(f"Error: {e}!")
+
+    finally:
+        cursor.close()
+        db.close()
 
 @bot.callback_query_handler(func = lambda call: True)
 def games(call):
@@ -111,5 +127,13 @@ def games(call):
     if call.data == "Tic_Tac_Toe":
         bot.delete_message(call.message.chat.id, call.message.message_id)
         find_game(call, "TTT")
-        
+    if re.findall('^T{3}[0-2]{2}$', call.data):
+        cell = re.sub('^T{3}', '', call.data)
+
+    # print(f'call.data: {call.data}')
+    # x = re.findall('^T{3}[0-2]{2}$', call.data)
+    # print(f'regex if: {x}')
+    # y = re.sub('^T{3}', '', call.data)
+    # print(f'regex next: {y}')
+
 bot.infinity_polling()
