@@ -1,3 +1,5 @@
+from hashlib import new
+from turtle import update
 import telebot
 from telebot import types
 import sqlite3
@@ -18,8 +20,11 @@ with sqlite3.connect("database.db") as db:
     CREATE TABLE IF NOT EXISTS ttt(
         chat_host VARCHAR(20) PRIMARY KEY NOT NULL,
         chat_player VARCHAR(20) NOT NULL,
-        turn VARCHAR(1)
-    )
+        turn VARCHAR(1) NOT NULL,
+        play_table VARCHAR(9) NOT NULL,
+        message_host VARCHAR(20),
+        message_player VARCHAR(20)
+    );
     """
 
     cursor.executescript(query)
@@ -111,7 +116,8 @@ def game_TTT(host, player):
         db = sqlite3.connect("database.db")
         cursor = db.cursor()
 
-        cursor.execute("INSERT INTO ttt(chat_host, chat_player, turn) VALUES(?, ?, ?)", msg_host, msg_player, '0')
+        values = [str(msg_host.chat.id), str(msg_player.chat.id), "0", "000000000", str(msg_host.message_id), str(msg_player.message_id)]
+        cursor.execute("INSERT INTO ttt(chat_host, chat_player, turn, play_table, message_host, message_player) VALUES(?, ?, ?, ?, ?, ?)", values)
         db.commit()
 
     except sqlite3.Error as e:
@@ -121,6 +127,123 @@ def game_TTT(host, player):
         cursor.close()
         db.close()
 
+def check_user(call, cell):
+    chat_user_id = call.message.chat.id
+
+    try:
+        db = sqlite3.connect("database.db")
+        cursor = db.cursor()
+
+        cursor.execute("SELECT * FROM ttt WHERE turn='0' AND chat_host=? OR turn='1' AND chat_player=?", [chat_user_id, chat_user_id])
+        row = cursor.fetchone() 
+        new_row = []
+        index = int(cell[0])*3 + int(cell[1])
+
+        if row[3][index] == '0':
+        
+            if row:
+                if row[2] == "0":
+                    new_row.append('1')
+                    string = row[3][:index] + '1' + row[3][index+1:]
+                    new_row.append(string)
+                else:
+                    new_row.append('0')
+                    string = row[3][:index] + '2' + row[3][index+1:]
+                    new_row.append(string)
+
+                new_row.append(row[0])
+                cursor.execute("UPDATE ttt SET turn=?, play_table=? WHERE chat_host=?", new_row)
+                db.commit()
+
+                update_table(row[0], row[1], row[2], new_row[1], call, row[4], row[5])
+                
+            else:
+                bot.send_message(chat_user_id, "Don't your turn! Wait!")
+            
+        else:
+            bot.send_message(chat_user_id, "Cell is busy! Choose other!")
+
+    except sqlite3.Error as e:
+        print(f"Error: {e}!")
+
+    finally:
+        cursor.close()
+        db.close()
+
+
+def update_table(host, player, turn, cells, call, m_host, m_player):
+    markup = types.InlineKeyboardMarkup()
+    markup.row_width = 3
+
+    for i in range(3):
+        btn = []
+        sign = ""
+        for j in range(3):
+            if cells[j + i*3] == "0":
+                sign = "⬜"
+            elif cells[j + i*3] == "1":
+                sign = "❌"
+            else:
+                sign = "⭕"
+
+            btn.append(types.InlineKeyboardButton(text=sign, callback_data='TTT'+str(i)+str(j)))
+
+        markup.add(btn[0], btn[1], btn[2])
+
+    if turn == "0":
+        bot.edit_message_text(chat_id=host, message_id=call.message.message_id, text="Rules:", reply_markup=markup)
+        bot.edit_message_text(chat_id=player, message_id=m_player, text="Rules:", reply_markup=markup)
+
+    else:
+        bot.edit_message_text(chat_id=player, message_id=call.message.message_id, text="Rules:", reply_markup=markup)
+        bot.edit_message_text(chat_id=host, message_id=m_host, text="Rules:", reply_markup=markup)
+
+    check_win(host, player, m_host, m_player, cells)
+
+def check_win(host, player, m_host, m_player, cells):
+    win = 2
+    winning_comb = [cells[0]+cells[4]+cells[8],
+                    cells[6]+cells[4]+cells[2],
+                    cells[0]+cells[1]+cells[2],
+                    cells[3]+cells[4]+cells[5],
+                    cells[6]+cells[7]+cells[8],
+                    cells[0]+cells[3]+cells[6],
+                    cells[1]+cells[4]+cells[7],
+                    cells[2]+cells[5]+cells[8]]
+    
+    if '111' in winning_comb:
+        win = 0
+    elif '222' in winning_comb:
+        win = 1
+
+    if win < 2:
+
+        bot.delete_message(host, m_host)
+        bot.delete_message(player, m_player)
+
+        try:
+            db = sqlite3.connect("database.db")
+            cursor = db.cursor()
+
+            cursor.execute("DELETE FROM ttt WHERE chat_host=?", [host,])
+            db.commit()
+
+            if win == 0:
+               cursor.execute("SELECT id_user FROM users WHERE id_chat=?", (host,))
+            else:
+               cursor.execute("SELECT id_user FROM users WHERE id_chat=?", (player,)) 
+
+            winner = cursor.fetchone()[0]
+            bot.send_message(host, f"Winner: {winner}")
+            bot.send_message(player, f"Winner: {winner}")
+
+        except sqlite3.Error as e:
+            print(f"Error: {e}!")
+
+        finally:
+            cursor.close()
+            db.close()
+
 @bot.callback_query_handler(func = lambda call: True)
 def games(call):
 
@@ -129,11 +252,6 @@ def games(call):
         find_game(call, "TTT")
     if re.findall('^T{3}[0-2]{2}$', call.data):
         cell = re.sub('^T{3}', '', call.data)
-
-    # print(f'call.data: {call.data}')
-    # x = re.findall('^T{3}[0-2]{2}$', call.data)
-    # print(f'regex if: {x}')
-    # y = re.sub('^T{3}', '', call.data)
-    # print(f'regex next: {y}')
+        check_user(call, cell)
 
 bot.infinity_polling()
