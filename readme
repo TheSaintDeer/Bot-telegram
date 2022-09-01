@@ -1,0 +1,1 @@
+To use a bot, you need to create your own bot using BotFather, request the API, and add it to the API_TOKEN variable on line 30 of the code. The functionality is limited only to playing Tic Tac Toe, more was planned, but it became lazy and the purpose of the work was different. =)
