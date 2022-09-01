@@ -1,5 +1,3 @@
-from hashlib import new
-from turtle import update
 import telebot
 from telebot import types
 import sqlite3
@@ -29,7 +27,7 @@ with sqlite3.connect("database.db") as db:
 
     cursor.executescript(query)
 
-API_TOKEN = '5491063411:AAHuG5JGbBJqBQOpxiskOiPy2FEdsnCPxOQ'
+API_TOKEN = 'API_of_your_bot'
 bot = telebot.TeleBot(API_TOKEN)
 
 def sign_up(message):
@@ -139,14 +137,15 @@ def check_user(call, cell):
         new_row = []
         index = int(cell[0])*3 + int(cell[1])
 
-        if row[3][index] == '0':
-        
-            if row:
+        if row:
+            if row[3][index] == '0':
                 if row[2] == "0":
+
                     new_row.append('1')
                     string = row[3][:index] + '1' + row[3][index+1:]
                     new_row.append(string)
                 else:
+
                     new_row.append('0')
                     string = row[3][:index] + '2' + row[3][index+1:]
                     new_row.append(string)
@@ -156,12 +155,12 @@ def check_user(call, cell):
                 db.commit()
 
                 update_table(row[0], row[1], row[2], new_row[1], call, row[4], row[5])
-                
+
             else:
-                bot.send_message(chat_user_id, "Don't your turn! Wait!")
+                bot.send_message(chat_user_id, "Cell is busy! Choose other!")
             
         else:
-            bot.send_message(chat_user_id, "Cell is busy! Choose other!")
+            bot.send_message(chat_user_id, "Don't your turn! Wait!")
 
     except sqlite3.Error as e:
         print(f"Error: {e}!")
@@ -169,7 +168,6 @@ def check_user(call, cell):
     finally:
         cursor.close()
         db.close()
-
 
 def update_table(host, player, turn, cells, call, m_host, m_player):
     markup = types.InlineKeyboardMarkup()
@@ -236,6 +234,28 @@ def check_win(host, player, m_host, m_player, cells):
             winner = cursor.fetchone()[0]
             bot.send_message(host, f"Winner: {winner}")
             bot.send_message(player, f"Winner: {winner}")
+
+        except sqlite3.Error as e:
+            print(f"Error: {e}!")
+
+        finally:
+            cursor.close()
+            db.close()
+
+    elif not '0' in list(cells):
+
+        bot.delete_message(host, m_host)
+        bot.delete_message(player, m_player)
+
+        try:
+            db = sqlite3.connect("database.db")
+            cursor = db.cursor()
+
+            cursor.execute("DELETE FROM ttt WHERE chat_host=?", [host,])
+            db.commit()
+
+            bot.send_message(host, "Draw")
+            bot.send_message(player, "Draw")
 
         except sqlite3.Error as e:
             print(f"Error: {e}!")
